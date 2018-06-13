@@ -1,45 +1,37 @@
 require 'mqtt'
 require 'json'
 
-chipid, ip, type = ARGV
+chipid, ip = ARGV
+
+pins = [
+  { number: 1, type: 'switch', mode: :output },
+  { number: 2, type: 'dimmer', mode: :output },
+  { number: 3, type: 'aircon', mode: :output }
+]
 
 def sub(chipid)
   MQTT::Client.connect('localhost') do |c|
-    c.subscribe "/dev/#{chipid}" 
+    c.subscribe "/node/#{chipid}" 
     c.get do |t, m|
-      c.publish "/dev/feedback", {
-        chipid: chipid,
-        msg: JSON.parse(m),
-        status: 'success'
-      }.to_json
-      puts m
+      puts JSON.parse(m)
     end
   end
 end
 
-def reg(chipid, ip, type)
+def ping(chipid, ip, pins)
   MQTT::Client.connect('localhost') do |c|
-    c.publish "/dev/reg", {
+    c.publish "/jarvis", {
       ip: ip,
       chipid: chipid,
-      type: type
+      pins: pins
     }.to_json
   end
 end
 
-def ping(chipid, ip)
-  MQTT::Client.connect('localhost') do |c|
-    c.publish "/dev/ping", {
-      ip: ip,
-      chipid: chipid 
-    }.to_json
-  end
-end
-
-def bg_ping(chipid, ip)
+def bg_ping(chipid, ip, pins)
   Thread.new do 
     while true
-      ping(chipid, ip)
+      ping(chipid, ip, pins)
       sleep(5)
     end
   end
@@ -51,16 +43,15 @@ def bg_sub(chipid)
   end
 end
 
-reg(chipid, ip, type)
 th_sub = bg_sub(chipid)
-th_ping = bg_ping(chipid, ip)
+th_ping = bg_ping(chipid, ip, pins)
 
 while true
   cmd = STDIN.gets.chomp
   if cmd == 'exit'
     exit(0)
   elsif cmd == 'ping'
-    th_ping = bg_ping(chipid, ip)
+    th_ping = bg_ping(chipid, ip, pins)
   elsif cmd == 'noping'
     Thread.kill(th_ping)
   elsif cmd == 'nosub'
